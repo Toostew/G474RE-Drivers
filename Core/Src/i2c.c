@@ -8,7 +8,7 @@
 #include "main.h"
 
 
-//configuration for I2C1, Polling, without DMA or interrupts for BME280
+//configuration for I2C1, Polling, without DMA or interrupts for MPU6050
 //configure RCC, GPIO
 void i2c1_MPU_config_polling(){
 
@@ -67,6 +67,73 @@ void i2c1_MPU_config_polling(){
 	I2C1->CR1 |= (1 << 0); //pe enable
 
 }
+
+//configuration for I2C1, DMA, without interrupts for MPU6050
+//configure RCC, GPIO
+void i2c1_MPU_config_DMA(){
+
+	//enable clocks for I2C
+	RCC->APB1ENR1 &= ~(1 << 21);
+	RCC->APB1ENR1 |=  (1 << 21);
+
+	//enable clocks for GPIOB
+	RCC->AHB2ENR &= ~(1 << 1);
+	RCC->AHB2ENR |=  (1 << 1);
+
+	//enable clocks for DMA1 and DMAMUX
+	RCC->AHB1ENR &= ~(1 << 0);
+	RCC->AHB1ENR &= ~(1 << 2);
+	RCC->AHB1ENR |= (1 << 0);
+	RCC->AHB1ENR |= (1 << 2);
+
+	//change clock source for I2C1 to HSI16 (16 MHz)
+	RCC->CCIPR &= ~(0b11 << 12);
+	RCC->CCIPR |=  (0b10 << 12);
+
+
+	//GPIOMODER set for I2C1
+	GPIOB->MODER &= ~(0b11 << 16);
+	GPIOB->MODER &= ~(0b11 << 18);
+	GPIOB->MODER |= (0b10 << 16);
+	GPIOB->MODER |= (0b10 << 18);
+
+	//GPIO OTYPER set pull-drain
+	GPIOB->OTYPER &= ~(1 << 8);
+	GPIOB->OTYPER &= ~(1 << 9);
+	GPIOB->OTYPER |=  (1 << 8);
+	GPIOB->OTYPER |=  (1 << 9);
+
+	//GPIO OSPEEDR set low speed (i2c running at 100 khz)
+	GPIOB->OSPEEDR &= ~(0b11 << 16);
+	GPIOB->OSPEEDR &= ~(0b11 << 18);
+
+	//GPIO PUPDR set pull up for pull up resistors
+	GPIOB->PUPDR &= ~(0b11 << 16);
+	GPIOB->PUPDR &= ~(0b11 << 18);
+	GPIOB->PUPDR |= (1 << 16);
+	GPIOB->PUPDR |= (1 << 18);
+
+	//GPIO set AF4 for I2C1 SDA and SCL
+	//AFR is split into 2 32-bit arrays,AFRH is AFR[1]
+	GPIOB->AFR[1] &= ~(0b1111 << 0);
+	GPIOB->AFR[1] &= ~(0b1111 << 4);
+	GPIOB->AFR[1] |= (4 << 0);
+	GPIOB->AFR[1] |= (4 << 4);
+
+	//set timing reg for 100KHz, following manual
+	I2C1->TIMINGR = 0x00000000;
+	I2C1->TIMINGR |= (0x3 << 28); //PRESC
+	I2C1->TIMINGR |= (0x4 << 20); //SCLDEL
+	I2C1->TIMINGR |= (0x2 << 16); //SDADEL
+	I2C1->TIMINGR |= (0xF << 8); //SCLH
+	I2C1->TIMINGR |= (0x13 << 0); //SCLL
+
+	//enable I2C1
+	I2C1->CR1 = 0x00000000;
+	I2C1->CR1 |= (1 << 0); //pe enable
+
+}
+
 
 //I2C polling read without DMA or Interrupts
 uint8_t i2c1_poll_read(uint8_t slave_addr, uint8_t reg_addr) {
