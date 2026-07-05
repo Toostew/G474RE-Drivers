@@ -109,16 +109,20 @@ int main(void)
     Error_Handler();
   }
 
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+  uint8_t data1 = 0;
+  uint8_t data2 = 0;
 
-    /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */
-  }
-  /* USER CODE END 3 */
+  //user code and stuff
+  i2c1_BME_config_polling();
+  data1 = i2c1_poll_read(0x68, 0x75);
+  data2 = i2c1_poll_read(0x68, 0x75);
+
+
+  while(1);
+
+
+
 }
 
 /**

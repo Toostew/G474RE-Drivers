@@ -18,6 +18,8 @@
   */
 /* USER CODE END Header */
 
+//this is the master, the one header to rule them all
+
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __MAIN_H
 #define __MAIN_H
@@ -28,9 +30,18 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32g4xx_hal.h"
-
 #include "stm32g4xx_nucleo.h"
 #include <stdio.h>
+
+
+#include "i2c.h"
+
+
+
+
+
+
+
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
