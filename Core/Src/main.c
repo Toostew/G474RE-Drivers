@@ -109,14 +109,16 @@ int main(void)
     Error_Handler();
   }
 
-  uint8_t data1 = 0;
-  uint8_t data2 = 0;
+
 
 
   //user code and stuff
-  i2c1_BME_config_polling();
-  data1 = i2c1_poll_read(0x68, 0x75);
-  data2 = i2c1_poll_read(0x68, 0x75);
+  i2c1_MPU_config_polling();
+
+  uint8_t power1Byte = i2c1_poll_read(0x68, 0x6B);
+  power1Byte &= ~(1 << 6); //set sleep mode = 0
+  power1Byte |= (1 << 0); // CLKSEL = 1;
+  i2c1_poll_write(0x68, 0x6B, power1Byte);
 
 
   while(1);
