@@ -35,6 +35,9 @@ extern "C" {
 
 
 #include "i2c.h"
+#include "interrupt.h"
+
+extern volatile int readStatus;
 
 
 

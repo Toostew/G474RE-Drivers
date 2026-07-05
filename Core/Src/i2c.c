@@ -68,7 +68,7 @@ void i2c1_MPU_config_polling(){
 
 }
 
-//configuration for I2C1, DMA, without interrupts for MPU6050
+//configuration for I2C1, DMA for MPU6050. Use this for Interrupts or just for DMA
 //configure RCC, GPIO
 void i2c1_MPU_config_DMA(){
 
@@ -156,6 +156,62 @@ void i2c1_MPU_config_DMA(){
 
 }
 
+void i2c1_DMA_read_interrupt(uint8_t slave_addr, uint8_t reg_addr, uint8_t numBytes, uint8_t * dataBuffer){
+	//wait until not busy
+	while ((I2C1->ISR & (1 << 15)));
+
+    // Clear CR2 configuration bits
+    I2C1->CR2 = 0x00000000;
+
+    // Set up to write 1 byte (the register address)
+    I2C1->CR2 |= (slave_addr << 1); //target address, SADD
+    I2C1->CR2 |= (1 << 16); //NBYTES
+
+
+    //generate START
+    I2C1->CR2 |= (1 << 13);
+
+    //Wait for TXIS to be ready, then send the register address
+    while (!(I2C1->ISR & I2C_ISR_TXIS)) {
+        if (I2C1->ISR & I2C_ISR_NACKF) {
+        	I2C1->ICR |= I2C_ICR_NACKCF; //clear NACK Flag
+        	return;
+        }
+    }
+    I2C1->TXDR = reg_addr;
+
+    //wait for I2C1 TC flag flipped
+    while (!(I2C1->ISR & I2C_ISR_TC));
+
+    //Read phase
+    //Configure DMA
+    DMA1_Channel1->CCR &= ~(1 << 0); //Make sure the channel is disabled
+
+    DMA1_Channel1->CMAR = (uint32_t)(dataBuffer);
+    DMA1_Channel1->CPAR = (uint32_t)(&I2C1->RXDR);
+    DMA1_Channel1->CNDTR = (uint32_t)(numBytes);
+    DMA1_Channel1->CCR |= (1 << 1); //enable Transfer complete Interrupt
+    DMA1_Channel1->CCR |= (1 << 0); //Enable DMA channel
+
+    //configure I2C
+    //create a new CR2 with NBYTES and AUTOEND so we dont have to generate a stop condition ourselves
+    I2C1->CR2 &= ~((1 << 25) | (0b11111111 << 16) | (0b1111111111 << 0));
+    I2C1->CR2 |= (slave_addr << 1); //register address
+    I2C1->CR2 |= (numBytes << 16);			//set Number of bytes
+    I2C1->CR2 |= (1 << 10);   // Set to Read Mode
+    I2C1->CR2 |= (1 << 25);  // turn on AUTOEND
+
+    //turn on RXDMAEN
+    I2C1->CR1 |= (1 << 15);
+
+    //generate repeated start
+    I2C1->CR2 |= (1 << 13);
+
+    //we will not check for completion, the function terminates immediately.
+    //the IRQ for DMA1 channel 1 will be called when the DMA transfer is complete, but that does not guarantee the transaction is over
+    //we need to have a seperate IRQ to detect the STOPF generation. Once STOP is detected, transaction is truly over
+}
+
 //I2C DMA without interrupts
 void i2c1_DMA_read(uint8_t slave_addr, uint8_t reg_addr, uint8_t numBytes, uint8_t * dataBuffer){
 
@@ -219,6 +275,8 @@ void i2c1_DMA_read(uint8_t slave_addr, uint8_t reg_addr, uint8_t numBytes, uint8
      while(!(I2C1->ISR & (1 << 5)));
      I2C1->ICR |= (1 << 5); // clear STOPF
 }
+
+
 
 
 //I2C polling read without DMA or Interrupts

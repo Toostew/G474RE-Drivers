@@ -50,6 +50,8 @@ COM_InitTypeDef BspCOMInit;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+
+volatile int readStatus = 0;
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -114,14 +116,16 @@ int main(void)
 
   //user code and stuff
   i2c1_MPU_config_DMA();
+  interrupt_DMA_Config();
 
-  i2c1_DMA_read(0x68, 0x6B, 1, dataBuffer);
+  i2c1_DMA_read_interrupt(0x68, 0x6B, 1, dataBuffer);
+  while(readStatus == 0);
   dataBuffer[0] &= ~(1 << 6); //set sleep mode = 0
   dataBuffer[0] |= (1 << 0); // CLKSEL = 1;
   i2c1_poll_write(0x68, 0x6B, dataBuffer[0]);
 
 
-  while(1);
+
 
 
 
