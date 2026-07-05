@@ -90,6 +90,26 @@ void i2c1_MPU_config_DMA(){
 	RCC->CCIPR &= ~(0b11 << 12);
 	RCC->CCIPR |=  (0b10 << 12);
 
+	//DMAMUX setting
+	//ensure DMA is closed
+	//I2C1 RX = 16, I2C1 TX = 17
+	DMAMUX1_Channel0->CCR = 0x00000000;
+	DMAMUX1_Channel1->CCR = 0x00000000;
+	DMAMUX1_Channel0->CCR |= (16 << 0); //DMAMUX channel 0 = DMA1Channel 1 = RX
+	DMAMUX1_Channel1->CCR |= (17 << 0); //DMAMUX channel 1 = DMA1Channel 2 = TX
+
+	//DMAC1 config
+	DMA1_Channel1->CCR = 0x00000000;
+	DMA1_Channel1->CCR |= ((0 << 10) // memory size = 8 bits
+			| (1 << 7)   // Memory increment 1
+			| (0 << 4)); // Data direction 0 = from peripheral
+	//DMAC2 config
+	DMA1_Channel2->CCR = 0x00000000;
+	DMA1_Channel2->CCR |= ((0 << 10)
+			| (1 << 7)
+			| (1 << 4)); //data direction 1 = from memory
+
+
 
 	//GPIOMODER set for I2C1
 	GPIOB->MODER &= ~(0b11 << 16);
@@ -130,8 +150,74 @@ void i2c1_MPU_config_DMA(){
 
 	//enable I2C1
 	I2C1->CR1 = 0x00000000;
+	I2C1->CR1 |= ((1 << 15) //DMA mode enabled for RX
+			| (1 << 14)); //DMA mode enabled for TX
 	I2C1->CR1 |= (1 << 0); //pe enable
 
+}
+
+//I2C DMA without interrupts
+void i2c1_DMA_read(uint8_t slave_addr, uint8_t reg_addr, uint8_t numBytes, uint8_t * dataBuffer){
+
+	//wait until not busy
+	while ((I2C1->ISR & (1 << 15)));
+
+    // Clear CR2 configuration bits
+    I2C1->CR2 = 0x00000000;
+
+    // Set up to write 1 byte (the register address)
+    I2C1->CR2 |= (slave_addr << 1); //target address, SADD
+    I2C1->CR2 |= (1 << 16); //NBYTES
+
+
+    //generate START
+    I2C1->CR2 |= (1 << 13);
+
+    //Wait for TXIS to be ready, then send the register address
+    while (!(I2C1->ISR & I2C_ISR_TXIS)) {
+        if (I2C1->ISR & I2C_ISR_NACKF) {
+        	I2C1->ICR |= I2C_ICR_NACKCF; //clear NACK Flag
+        	return;
+        }
+    }
+    I2C1->TXDR = reg_addr;
+
+    //wait for I2C1 TC flag flipped
+     while (!(I2C1->ISR & I2C_ISR_TC));
+
+     //Read phase
+     //Configure DMA
+     DMA1_Channel1->CCR &= ~(1 << 0); //Make sure the channel is disabled
+
+     DMA1_Channel1->CMAR = (uint32_t)(dataBuffer);
+     DMA1_Channel1->CPAR = (uint32_t)(&I2C1->RXDR);
+     DMA1_Channel1->CNDTR = (uint32_t)(numBytes);
+
+     DMA1_Channel1->CCR |= (1 << 0); //Enable DMA channel
+
+     //configure I2C
+     //create a new CR2 with NBYTES and AUTOEND so we dont have to generate a stop condition ourselves
+     I2C1->CR2 &= ~((1 << 25) | (0b11111111 << 16) | (0b1111111111 << 0));
+     I2C1->CR2 |= (slave_addr << 1); //register address
+     I2C1->CR2 |= (numBytes << 16);			//set Number of bytes
+     I2C1->CR2 |= (1 << 10);   // Set to Read Mode
+     I2C1->CR2 |= (1 << 25);  // turn on AUTOEND
+
+     //generate repeated start
+     I2C1->CR2 |= I2C_CR2_START;
+
+     // 1. Wait for DMA1 Channel 1 Transfer Complete Flag (Bit 1 of DMA1->ISR is TCIF1)
+     while (!(DMA1->ISR & (1 << 1)));
+
+     // 2. Clear the DMA1 Channel 1 Transfer Complete Flag (Bit 1 of DMA1->IFCR)
+     DMA1->IFCR |= (1 << 1);
+
+     // 3. Disable the DMA channel so it releases control of the I2C hardware pipes
+     DMA1_Channel1->CCR &= ~(1 << 0);
+
+     // 4. NOW it is safe to wait for the physical I2C bus to send the STOP condition
+     while(!(I2C1->ISR & (1 << 5)));
+     I2C1->ICR |= (1 << 5); // clear STOPF
 }
 
 
@@ -203,7 +289,7 @@ uint8_t i2c1_poll_read(uint8_t slave_addr, uint8_t reg_addr) {
 void i2c1_poll_write(uint8_t slaveAddr, uint8_t targetReg, uint8_t payload){
 
 	//check busy flag
-	while(!(I2C1->ISR & (1 << 15)));
+	while((I2C1->ISR & (1 << 15)));
 
 	I2C1->CR2 = 0x00000000; //clear CR2
 
@@ -220,7 +306,7 @@ void i2c1_poll_write(uint8_t slaveAddr, uint8_t targetReg, uint8_t payload){
 		//while TXDR isnt empty check for NACKS
 		//ACKs requires the slave to pull SDA low in response, if nothing happens within a clock cycle, it is interpretated as NACK
 		if(I2C1->ISR & (1 << 4)){
-			I2C1->ISR &= ~(1 << 4); //clear I2C1 NACKF
+			I2C1->ICR |= (1 << 4); //clear I2C1 NACKF
 			return;
 		}
 	}

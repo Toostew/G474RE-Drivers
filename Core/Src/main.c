@@ -110,15 +110,15 @@ int main(void)
   }
 
 
-
+  uint8_t dataBuffer[32];
 
   //user code and stuff
-  i2c1_MPU_config_polling();
+  i2c1_MPU_config_DMA();
 
-  uint8_t power1Byte = i2c1_poll_read(0x68, 0x6B);
-  power1Byte &= ~(1 << 6); //set sleep mode = 0
-  power1Byte |= (1 << 0); // CLKSEL = 1;
-  i2c1_poll_write(0x68, 0x6B, power1Byte);
+  i2c1_DMA_read(0x68, 0x6B, 1, dataBuffer);
+  dataBuffer[0] &= ~(1 << 6); //set sleep mode = 0
+  dataBuffer[0] |= (1 << 0); // CLKSEL = 1;
+  i2c1_poll_write(0x68, 0x6B, dataBuffer[0]);
 
 
   while(1);
